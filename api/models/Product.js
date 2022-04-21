@@ -23,10 +23,19 @@ module.exports = mongoose.model(
       color: {
         type: Array,
       },
-      price: {
-        type: Number,
-        required: true,
-      },
+      price: [
+        {
+          amt: {
+            type: Number,
+            required: true,
+          },
+          discount: {
+            type: Number,
+            default: 0,
+          },
+          currency: { type: String, required: true },
+        },
+      ],
 
       instock: {
         type: Boolean,

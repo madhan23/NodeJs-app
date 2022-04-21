@@ -4,7 +4,8 @@ module.exports = mongoose.model(
   new mongoose.Schema(
     {
       userId: { type: String, required: true },
-      products: [{ type: Array }],
+      products: { type: Array },
+      price: { type: Object },
     },
     {
       timestamps: true,

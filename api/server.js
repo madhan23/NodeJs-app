@@ -1,24 +1,38 @@
 const express = require("express");
 const morgan = require("morgan");
 const app = express();
-const mongoose = require("mongoose");
+const CustomError = require("http-errors");
+const logger = require("winston");
+var cors = require("cors");
 require("dotenv").config();
+//DB Connection
+require("./db")();
 
-// Middleware
-app.use(morgan("tiny"));
+//Middlewares;
+app.use(cors());
 app.use(express.json());
-app.use("/api/auth/users", require("./routes/User"));
+if (app.get("env") === "development") {
+  app.use(morgan("tiny"));
+}
+app.use("/api/users", require("./routes/User"));
 app.use("/api/products", require("./routes/Product"));
-app.use("/api/cart", require("./routes/Product"));
-app.use("/api/orders", require("./routes/Product"));
+app.use("/api/cart", require("./routes/Cart"));
+app.use("/api/orders", require("./routes/Order"));
 
+app.use(async (req, res, next) => {
+  next(CustomError(404, "Not Found"));
+});
+
+app.use(async (err, req, res, next) => {
+  res.status(err.status || 500).json({
+    errors: {
+      dateTime: new Date(),
+      status: err.status || 500,
+      message: err.message,
+    },
+  });
+});
 const PORT = process.env.PORT || 5000;
-
-mongoose
-  .connect(process.env.MONGO_URL)
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`server start running on port ${PORT}`);
-    });
-  })
-  .catch((err) => console.log(err));
+app.listen(PORT, () => {
+  logger.info(`server start running on port ${PORT}`);
+});

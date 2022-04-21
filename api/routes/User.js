@@ -2,43 +2,54 @@ const router = require("express").Router();
 const User = require("../models/User");
 const CryptoJS = require("crypto-js");
 const jwt = require("jsonwebtoken");
+const CustomError = require("http-errors");
+const { validate } = require("../middleware/user");
+const logger = require("winston");
 
-//Register
-router.post("/register", async (req, res) => {
-  const { username, email, password } = req.body;
-  //validation
-  console.log(req.body);
-  const user = await User.findOne({ email: email });
-  console.log(user);
-  if (user) {
-    if (email === user.email)
-      return res.status(400).json("email ID already in use");
-    if (username === user.username)
-      return res.status(400).json("username  already in use");
-  }
-
-  const newUser = new User({
-    username: req.body.username,
-    email: req.body.email,
-    password: CryptoJS.AES.encrypt(req.body.password, process.env.SECRET_KEY),
-    isAdmin: req.body.isAdmin,
-  });
+router.get("/", async (req, res, next) => {
   try {
-    await newUser.save();
-    res.status(201).json(newUser);
+    const users = await User.find({}, { username: 1, email: 1, isAdmin: 1 });
+    if (!users) {
+      throw CustomError(404, "No Users Details Found");
+    }
+    logger.info(`Fetched all Users Details from DB`);
+    return res.status(200).json(users);
   } catch (error) {
-    res.status(500).json(error);
+    logger.error(error);
+    next(error);
   }
 });
-
-// Login
-
-router.post("/login", async (req, res) => {
+router.post("/signup", validate, async (req, res, next) => {
+  const { username, email, password } = req.body;
   try {
-    //const user = await User.findOne().or([{username: req.body},{}]);
+    const dbUser = await User.findOne({ email: email });
+    const dbUsername = await User.findOne({ username: username });
+    if (dbUser !== null) {
+      throw CustomError(400, "email ID already in use");
+    }
+    if (dbUsername !== null) {
+      throw CustomError(400, "username already in use");
+    }
+    const newUser = new User({
+      username: req.body.username,
+      email: req.body.email,
+      password: CryptoJS.AES.encrypt(password, process.env.SECRET_KEY),
+      isAdmin: req.body.isAdmin,
+    });
+
+    await newUser.save();
+    logger.info(`Saved User Details into DB`);
+    res.status(201).json(newUser);
+  } catch (error) {
+    logger.error(error);
+    next(error);
+  }
+});
+router.post("/login", validate, async (req, res, next) => {
+  try {
     const user = await User.findOne({ email: req.body.email });
     if (!user) {
-      return res.status(401).json("Invalid email");
+      throw CustomError(401, "emailId does not exists");
     }
     const hashPassword = CryptoJS.AES.decrypt(
       user.password,
@@ -47,23 +58,25 @@ router.post("/login", async (req, res) => {
 
     const originalPassword = hashPassword.toString(CryptoJS.enc.Utf8);
     if (originalPassword !== req.body.password)
-      return res.status(401).json("Invalid Credentials");
+      throw CustomError(401, "Invalid Credentials");
 
-    //   removing password filed value from user object
+    //   removing password field value from User Object
     const { password, ...userDetails } = user._doc;
     const accessToken = jwt.sign(
       {
         id: user._id,
+        email: user.email,
         isAdmin: user.isAdmin,
       },
 
       process.env.JWT_SECRET_KEY,
       { expiresIn: "1d" }
     );
+    logger.info(`Logged In Successfully`);
     res.status(200).json({ userDetails, accessToken });
   } catch (error) {
-    console.log(error);
-    res.status(500).json("Oops something error occurred");
+    logger.error(error);
+    next(error);
   }
 });
 module.exports = router;
